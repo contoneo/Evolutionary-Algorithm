@@ -16,7 +16,7 @@ T_Start	= -5000
 # As t_0 is the time when the recording algorithm start, it is normally set to zero.
 t_0 = 0
 # T: Pre-crash recording time established in the regulation.
-T = (T_Start, 0)
+T = (T_Start, t_0)
 # popsize: Population size in the Evolutive Algorithm.  Number of test samples created with the algorithm
 popsize	= 4
 # lambda_new: New generated samples in each iteration
@@ -52,7 +52,7 @@ def initialize_samples_array():
     array = np.concatenate((t_start, t_End), axis=1)
     
     # Establish the array in the range from T_start to t_0 plus the offset and round to have only integers 
-    array = offset + np.rint(array * (T_Start - 2*offset))
+    array = t_0 + offset + np.rint(array * (T_Start - t_0 - 2*offset))
     
     return array
   
@@ -85,12 +85,8 @@ def V_2(samples_array):
     t_end = samples_array[:, t_end_column]
 
     # If t_end>t_0 we return the difference, otherwise we return T_Start - t_end,
-    # this last leaves negative results when T_Start <= t_end <= t_0, namely, when t_end is contained in T, thus:
-    #
-    # distance = np.where(t_end>t_0, t_end - t_0, T_Start - t_end)
-    #
-    # But as t_0 is set at zero then t_end - t_0 can be just t_end
-    distance = np.where(t_end>t_0, t_end, T_Start - t_end)
+    # this last leaves negative results when T_Start <= t_end <= t_0, namely, when t_end is contained in T
+    distance = np.where(t_end>t_0, t_end - t_0, T_Start - t_end)
     
     # We return only the positive numbers, as they are the ones not contained in the range [T_Start,t_0], 
     # othewise we return zero
@@ -152,7 +148,7 @@ def select_new_generation(matrix, scores):
 #  In order to maximize the exploration of possible errors, new random samples will be created, 
 #  so that every time the test is executed, it will take new values to test. The restriction 
 #  for the creation of test samples is the time range where the end of the trivial event can
-#  take place (T_Start, t_0) => (T_Start, 0).
+#  take place (T_Start, t_0).
 
 def step_1():
     # samples = initialize_samples_array()

@@ -51,7 +51,7 @@ The user asked for a review of the concept in README.md, checked against Evoluti
    - There is no RNG seed and no log of generations or verdicts, so test generation cannot be reproduced.
    - Proposal: add a seed parameter and persist each generation together with its scores and results.
 
-## B. README errors and inconsistencies
+## B. README errors and inconsistencies (**solved**)
 - The V2 formula is wrong for t_End > t_0. The code uses t_End − t_0; the README says |t_End − T_Start| in all "otherwise" cases. It should be "the distance to the nearest bound of T".
 - The selection index notation selects element k+1 while describing k.
 - Steps the README never describes:
@@ -63,7 +63,7 @@ The user asked for a review of the concept in README.md, checked against Evoluti
 - There is no "how to run" section.
 - Typos: goverment, descripted, milisecons, weigthed, lowerest, popzise, "test's parameters".
 
-## C. Code issues found while cross-checking
+## C. Code issues found while cross-checking  (**solved**)
 - `mutate_selected_offspring` (**solved**):
   - If every offspring is a duplicate, `offspring` becomes an empty 1-D array, and `fitness_function` / `V_1` crash on `[:, None, :]`.
     - Fix: boolean indexing keeps the (n, 2) shape, also when n = 0.
