@@ -28,14 +28,15 @@ The optimization made by the **EA** works according to the principles of softwar
 
 Then, the fitness function $f$ for a tuple $(t_{\text{start}}, t_{\text{End}})$ with respect to all *i*_tuples in $E$ is expressed as:
 * $\displaystyle f=V_1 +c⋅V_2$, Where
-* $\displaystyle V_1 = \frac{\min\limits_{i \in E}\Big[a \cdot \Big|t_{\text{start}} - E_i(t_{\text{start}})\Big| + b \cdot \Big|t_{\text{End}} - E_i(t_{\text{End}})\Big|\Big]}{1000}$
+* $\displaystyle V_1 = \frac{a \cdot \min\limits_{i \in E}\Big|t_{\text{start}} - E_i(t_{\text{start}})\Big| + b \cdot \min\limits_{j \in E}\Big|t_{\text{End}} - E_j(t_{\text{End}})\Big|}{1000}$
 * $\displaystyle V_2 = \begin{cases} 0 & \text{if } t_{\text{End}} \in T \\ |t_{\text{End}} - T_{\text{Start}}| & \text{otherwise} \end{cases}$
 
-The $V_1$ equation can be read as: "The sum of the distance; from the components of the tuple $(t_{\text{start}}, t_{\text{End}})$ correspondingly weighted by the constants $a$ and $b$, to the closest first and second component of any $E_i(t_{\text{start}})$ and $E_i(t_{\text{End}})$ component in the captured malfunction's collection $E$ divided by 1000", where:
+The $V_1$ equation can be read as: "The distance from $t_{\text{start}}$ to the closest start time of any tuple in the captured malfunction's collection $E$, weighted by $a$, plus the distance from $t_{\text{End}}$ to the closest end time of any tuple in $E$, weighted by $b$, divided by 1000", where:
 
-* $E $: Set of test samples that have led to find an error. Consequently, $E_i(t_{\text{start}})$ and $E_i(t_{\text{End}})$ are the first and second component of a tuple in the collection $E$
-* As the tuples are given in milisecons, the minimal sum of the weigthed distance is divided by $1000$ so that the result can be managed in one digit.
-* The end of the examined trivial event ($t_{\text{End}}$) are more important than its beginning ($t_{\text{Start}}$), therefore the equation prioritizes $\Big|t_{\text{End}} - E_i(t_{\text{End}})\Big|$ over $\Big|t_{\text{start}} - E_i(t_{\text{start}})\Big|$. Thus $b$ must be accordingly higher than $a$ ($b>a$).
+* $E$: Set of test samples that have led to find an error. Consequently, $E_i(t_{\text{start}})$ and $E_j(t_{\text{End}})$ are the first and second component of a tuple in the collection $E$.
+* $t_{\text{Start}}$ and $t_{\text{End}}$ are chosen independently, so their closest values may come from different tuples in $E$. This allows the algorithm to search any combination of known start and end times, rather than requiring a proposed tuple to match a single known tuple.
+* As the tuples are given in milliseconds, the weighted distance is divided by $1000$ so that the result can be managed in one digit.
+* The end of the examined trivial event ($t_{\text{End}}$) is more important than its beginning ($t_{\text{Start}}$), therefore the equation prioritizes<br>$\min\limits_{j \in E}\Big|t_{\text{End}} - E_j(t_{\text{End}})\Big|$ over $\min\limits_{i \in E}\Big|t_{\text{start}} - E_i(t_{\text{start}})\Big|$. Thus $b$ must be accordingly higher than $a$ ($b>a$).
 * If $E$ is empty, then $V_1=0$ consequently.
 
 The $V_2$ equation scores lower the trivial events (*the tuples* $(t_{\text{start}}, t_{\text{End}})$) that ends within the pre-crash recording time established by a market regulation, as the main purpose of the HiL test is to verify the functioning of an EDR device within the parameters established by a market 

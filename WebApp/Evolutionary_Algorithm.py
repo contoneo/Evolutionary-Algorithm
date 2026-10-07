@@ -65,20 +65,20 @@ def V_1(samples_array, error_hit_set):
     if error_hit_set.size == 0:  # if error_hit_set is empty
         return np.zeros(samples_array.shape[0]) # return an array filled with zeros
 
-    # weight (t_Start, E_i[t_Starμ]) and t_End, E_i[t_End] in the samples and error_hit_set matrices 
-    # with a and b correspondingly before the diffrence comparison between them 
-    weights = np.array([[a,b]])
-    samples_weigthed = samples_array * weights
-    error_hit_set_weigthed = error_hit_set * weights
-    
-    # Calculate the absolute difference between each row in samples_weigthed and all rows in error_hit_set
-    diff = np.abs(samples_weigthed[:, None, :] - error_hit_set_weigthed)
+    # Calculate the absolute difference between each row in samples_array and all rows in error_hit_set,
+    # separately for t_Start and t_End: shape (samples, error_hit_set, 2)
+    diff = np.abs(samples_array[:, None, :] - error_hit_set)
 
-    # Sum the members for each sample case
-    sum_evaluation = diff.sum(axis=2)
-    
-    # return the minimum for each case multiplied by V_1_scale
-    return np.min(sum_evaluation, axis=1) * V_1_scale
+    # t_Start and t_End are independent coordinates: take the closest E_i[t_Start] and the closest
+    # E_j[t_End] separately, so both may come from different tuples in error_hit_set
+    nearest = diff.min(axis=1)
+
+    # weight the distances to E_i[t_Start] and E_j[t_End] with a and b correspondingly and sum them
+    weights = np.array([a, b])
+    weighted_sum = nearest @ weights
+
+    # return the weighted sum for each case multiplied by V_1_scale
+    return weighted_sum * V_1_scale
 
 def V_2(samples_array):
     # Get the t_end of samples
