@@ -116,7 +116,7 @@ def select_offspring(bins, samples, lambda_new):
     
     return samples_selected
 
-def mutate_selected_offspring(offspring_selection, samples):
+def mutate_selected_offspring(offspring_selection, tested_samples):
     mutation = np.round(np.random.normal(mu, sigma, size=(lambda_new, 2))).astype(int)
     offspring = offspring_selection + mutation
 
@@ -125,11 +125,17 @@ def mutate_selected_offspring(offspring_selection, samples):
 
     # Swap the elements for the selected indices
     offspring[indices, :] = offspring[indices, ::-1]
-    
-    # Eliminate rows from offspring that are already present in samples
-    offspring = np.array([row for row in offspring if not any(np.array_equal(row, row2) for row2 in samples)])
-    
-    return offspring
+
+    # Eliminate rows that are repeated within offspring itself
+    offspring = np.unique(offspring, axis=0)
+
+    # Eliminate rows from offspring that have already been tested (current population and history).
+    # Compare every offspring row with every tested row: shape (offspring, tested_samples)
+    tested_samples = np.asarray(tested_samples).reshape(-1, 2)
+    already_tested = (offspring[:, None, :] == tested_samples[None, :, :]).all(axis=2).any(axis=1)
+
+    # Boolean indexing keeps the (n, 2) shape, also when no offspring is left (n = 0)
+    return offspring[~already_tested]
 
 def select_new_generation(matrix, scores):
     # Sort the rows based on the negation of scores.  
@@ -156,7 +162,12 @@ def step_1():
 
 # 2. Test execution and following test sample creation process.
 
-def step_2(samples):
+def step_2(samples, tested_samples=None):
+    # tested_samples: every sample tested so far (history).  If not given, only the current
+    # population counts as tested.
+    if tested_samples is None:
+        tested_samples = samples
+
     # 2.1. Evaluation:
     #  After the first test execution, the test results are evaluated within the fitness function 
     #  [Equation 6].
@@ -174,7 +185,7 @@ def step_2(samples):
     #  In this case the "Recombination" phase does not take place, so directly the new samples are
     #  mutated by means of Normal mutation function [Equation 8] for each
     #  property of the new samples (t_Start, t_End ).
-    offspring = mutate_selected_offspring(offspring_selection, samples)
+    offspring = mutate_selected_offspring(offspring_selection, tested_samples)
 
     # 2.4. Mutated Samples Evaluation:
     #  The new samples are evaluated within the fitness function.
@@ -198,8 +209,11 @@ def EA():
             "(Step 1) before calling EA()."
         )
     array = first_test_samples
+    # History of tested samples: the samples that found an error and every population run so far
+    tested_samples = np.unique(np.concatenate((error_hit_set.reshape(-1, 2), array)), axis=0)
     for _ in range(step_2_iterations):
-        array = step_2(array)
+        array = step_2(array, tested_samples)
+        tested_samples = np.unique(np.concatenate((tested_samples, array)), axis=0)
     return array
 
 if __name__ == "__main__":

@@ -64,9 +64,11 @@ The user asked for a review of the concept in README.md, checked against Evoluti
 - Typos: goverment, descripted, milisecons, weigthed, lowerest, popzise, "test's parameters".
 
 ## C. Code issues found while cross-checking
-- `mutate_selected_offspring`:
+- `mutate_selected_offspring` (**solved**):
   - If every offspring is a duplicate, `offspring` becomes an empty 1-D array, and `fitness_function` / `V_1` crash on `[:, None, :]`.
+    - Fix: boolean indexing keeps the (n, 2) shape, also when n = 0.
   - Duplicates are checked only against the current population, not against each other or against history.
+    - Fix: `np.unique` removes duplicates within the offspring. `EA()` keeps a history of tested samples (`error_hit_set` plus every population so far) and passes it to `step_2` and the mutation.
 - `step_1()` returns hard-coded samples. `initialize_samples_array()` is commented out.
 
 ✔ The algorithm module is duplicated between the root and WebApp/. Both copies rely on mutable module globals that the Streamlit UI patches.
