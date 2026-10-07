@@ -39,6 +39,7 @@ sigma = 5 # Standard deviation in normal distribution: It is also known as the s
 # error_hit_set = np.array([[-4025, -300],[-3213, -1232]])
 error_hit_set = np.array([])
 first_test_samples = np.array([])
+test_samples = np.array([])
 
 def initialize_samples_array():
     # Generate random values for the t_start values in the range [0,1]
@@ -196,9 +197,10 @@ def EA():
         array = step_2(array)
     return array
 
-# Step 1
-first_test_samples = step_1()
-print(first_test_samples)
-# Step 2 iterations
-test_samples = EA()
-print(test_samples)
+if __name__ == "__main__":
+    # Step 1
+    first_test_samples = step_1()
+    print(first_test_samples)
+    # Step 2 iterations
+    test_samples = EA()
+    print(test_samples)
