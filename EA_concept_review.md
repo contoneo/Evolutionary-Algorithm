@@ -69,11 +69,11 @@ The user asked for a review of the concept in README.md, checked against Evoluti
     - Fix: boolean indexing keeps the (n, 2) shape, also when n = 0.
   - Duplicates are checked only against the current population, not against each other or against history.
     - Fix: `np.unique` removes duplicates within the offspring. `EA()` keeps a history of tested samples (`error_hit_set` plus every population so far) and passes it to `step_2` and the mutation.
-- `step_1()` returns hard-coded samples. `initialize_samples_array()` is commented out.
+- (**ok**) `step_1()` returns hard-coded samples. `initialize_samples_array()` is commented out.
 
-✔ The algorithm module is duplicated between the root and WebApp/. Both copies rely on mutable module globals that the Streamlit UI patches.
+- (**solved**) The algorithm module is duplicated between the root and WebApp/. Both copies rely on mutable module globals that the Streamlit UI patches.
 
-✔j In the WebApp, "Run EA" before "Step 1" runs on an empty array, and the error is hidden by a bare `except`.
+- (**solved**) In the WebApp, "Run EA" before "Step 1" runs on an empty array, and the error is hidden by a bare `except`.
 
 ## Proposed follow-up (once the user picks a scope)
 1. Fix the README (section B) and document the missing steps and parameters.
