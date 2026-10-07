@@ -8,3 +8,4 @@
 /tf.py
 WebApp/__pycache__/*
 __pycache__/
+.venv/
