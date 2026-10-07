@@ -68,8 +68,10 @@ The user asked for a review of the concept in README.md, checked against Evoluti
   - If every offspring is a duplicate, `offspring` becomes an empty 1-D array, and `fitness_function` / `V_1` crash on `[:, None, :]`.
   - Duplicates are checked only against the current population, not against each other or against history.
 - `step_1()` returns hard-coded samples. `initialize_samples_array()` is commented out.
-- The algorithm module is duplicated between the root and WebApp/. Both copies rely on mutable module globals that the Streamlit UI patches.
-- In the WebApp, "Run EA" before "Step 1" runs on an empty array, and the error is hidden by a bare `except`.
+
+✔ The algorithm module is duplicated between the root and WebApp/. Both copies rely on mutable module globals that the Streamlit UI patches.
+
+✔j In the WebApp, "Run EA" before "Step 1" runs on an empty array, and the error is hidden by a bare `except`.
 
 ## Proposed follow-up (once the user picks a scope)
 1. Fix the README (section B) and document the missing steps and parameters.

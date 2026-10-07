@@ -5,10 +5,15 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+import logging
+
 import streamlit as st
 import Evolutionary_Algorithm as ea
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 def parse_input(input_text):
     # Split the input by lines and convert each line to a list of values
@@ -79,22 +84,29 @@ def main():
             try:
                 ea.error_hit_set =  parse_input(input_text)
                 col4.success("`error_hit_set` input successful!")
-            except ValueError:
-                col4.error("Invalid input format. Please enter a valid `error_hit_set`.")
+            except ValueError as e:
+                logger.exception("Invalid error_hit_set input")
+                col4.error(f"Invalid input format. Please enter a valid `error_hit_set`. ({e})")
 
         if col5.button("Create Random samples array \
             \n (Step 1)"):
             try:
                 ea.first_test_samples = ea.initialize_samples_array()
-            except ValueError:
-                col5.error("Error generating initial samples array")
-                
+            except ValueError as e:
+                logger.exception("Error generating initial samples array")
+                col5.error(f"Error generating initial samples array: {e}")
+
         if col6.button("Run Evolutionary Algorithm \
             \n (Step 2)"):
-            try:
-                ea.test_samples = ea.EA()
-            except:
-                col6.error("Error runnig Evolutionary Algorithm")
+            if ea.first_test_samples.size == 0:
+                col6.error("Please run 'Step 1' (Create Random samples array) first "
+                           "to generate the initial samples array.")
+            else:
+                try:
+                    ea.test_samples = ea.EA()
+                except Exception as e:
+                    logger.exception("Error running Evolutionary Algorithm")
+                    col6.error(f"Error running Evolutionary Algorithm: {e}")
 
         if ea.error_hit_set.size != 0:
             df_error_set = pd.DataFrame(ea.error_hit_set, columns=("t_Start" , "t_End"))

@@ -192,6 +192,11 @@ def step_2(samples):
 
 # Then, the EA algorithm is:
 def EA():
+    if first_test_samples.size == 0:
+        raise ValueError(
+            "first_test_samples is empty. Run initialize_samples_array() "
+            "(Step 1) before calling EA()."
+        )
     array = first_test_samples
     for _ in range(step_2_iterations):
         array = step_2(array)
