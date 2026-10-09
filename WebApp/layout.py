@@ -32,16 +32,32 @@ def init_state():
     st.session_state.setdefault("archive", ea.new_archive())
     st.session_state.setdefault("test_set", np.array([]))
     st.session_state.setdefault("test_set_version", 0)
+    st.session_state.setdefault("verdicts", np.array([], dtype=bool))
     st.session_state.setdefault("sigma", ea.sigma)
     st.session_state.setdefault("cycle", 0)
     st.session_state.setdefault("cycles_without_failure", 0)
     st.session_state.setdefault("rng", ea.rng)
 
 
-def test_set_dataframe(test_set):
+def test_set_dataframe(test_set, verdicts):
     df = pd.DataFrame(test_set, columns=("t_Start", "t_End"))
-    df["error found"] = False
+    df["error found"] = verdicts
     return df
+
+
+def reset_verdicts():
+    st.session_state.verdicts = np.zeros(len(st.session_state.test_set), dtype=bool)
+
+
+def apply_editor_edits(editor_key):
+    # Mirror the editor's checkbox edits into session_state so the marks survive reruns
+    # (they are only cleared by reset_verdicts when a new test set is created).
+    edits = st.session_state[editor_key].get("edited_rows", {})
+    verdicts = st.session_state.verdicts.copy()
+    for row, changes in edits.items():
+        if "error found" in changes:
+            verdicts[int(row)] = bool(changes["error found"])
+    st.session_state.verdicts = verdicts
 
 
 def main():
@@ -101,8 +117,11 @@ def main():
     st.subheader("Error hit set and archive")
     col4, col5 = st.columns(2)
     input_text = col4.text_area(
-        "`error_hit_set`: one tuple per line, `t_Start, t_End`"
-        "\nEx:\n-4025, -300\n-3213, -1232"
+        # Markdown collapses single newlines; two trailing spaces force a line break.
+        "`error_hit_set`: one tuple per line, `t_Start, t_End`  \n"
+        "Ex:  \n"
+        "-4025, -300  \n"
+        "-3213, -1232"
     )
     if col4.button("Enter `error_hit_set`"):
         try:
@@ -142,6 +161,7 @@ def main():
         st.session_state.archive = ea.merge_manual_error_hit_set(ea.new_archive(), ea.error_hit_set)
         st.session_state.test_set = ea.initialize_samples_array(ea.popsize, rng=st.session_state.rng)
         st.session_state.test_set_version += 1
+        reset_verdicts()
         st.session_state.sigma = ea.sigma
         st.session_state.cycle = 0
         st.session_state.cycles_without_failure = 0
@@ -152,15 +172,17 @@ def main():
         st.write(f"Current test set (cycle {st.session_state.cycle}, sigma={st.session_state.sigma:.1f}):")
         editor_key = f"test_set_editor_{st.session_state.test_set_version}"
         edited = st.data_editor(
-            test_set_dataframe(st.session_state.test_set),
+            test_set_dataframe(st.session_state.test_set, st.session_state.verdicts),
             key=editor_key,
+            on_change=apply_editor_edits,
+            args=(editor_key,),
             hide_index=True,
             column_config={"error found": st.column_config.CheckboxColumn(required=True)},
             disabled=["t_Start", "t_End"],
         )
 
         if col7.button("Record HiL results"):
-            verdicts = edited["error found"].to_numpy(dtype=int)
+            verdicts = st.session_state.verdicts.astype(int)
             st.session_state.archive = ea.record_results(
                 st.session_state.archive,
                 st.session_state.test_set,
@@ -184,9 +206,13 @@ def main():
                     rng=st.session_state.rng,
                 )
                 st.session_state.test_set_version += 1
+                reset_verdicts()
             except Exception as e:
                 logger.exception("Error proposing the next test set")
                 col8.error(f"Error proposing the next test set: {e}")
+            else:
+                # The table above was already drawn with the old set; redraw with the new one.
+                st.rerun()
 
     st.divider()
     if not st.session_state.archive.empty:
