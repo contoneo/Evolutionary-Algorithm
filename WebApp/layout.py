@@ -131,20 +131,6 @@ def main():
             logger.exception("Invalid error_hit_set input")
             col4.error(f"Invalid input format. Please enter a valid `error_hit_set`. ({e})")
 
-    uploaded = col5.file_uploader("Upload archive CSV", type="csv")
-    if uploaded is not None and col5.button("Load uploaded archive"):
-        try:
-            loaded = pd.read_csv(uploaded)
-            missing = set(ea.ARCHIVE_COLUMNS) - set(loaded.columns)
-            if missing:
-                raise ValueError(f"missing columns: {sorted(missing)}")
-            st.session_state.archive = loaded[ea.ARCHIVE_COLUMNS]
-            st.session_state.cycle = int(loaded["cycle"].max()) if not loaded.empty else 0
-            col5.success(f"Archive loaded: {len(loaded)} rows, cycle {st.session_state.cycle}.")
-        except Exception as e:
-            logger.exception("Error loading archive")
-            col5.error(f"Error loading archive: {e}")
-
     if not st.session_state.archive.empty:
         col5.download_button(
             "Download archive CSV",
