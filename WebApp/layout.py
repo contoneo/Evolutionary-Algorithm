@@ -7,118 +7,192 @@ if _REPO_ROOT not in sys.path:
 
 import logging
 
-import streamlit as st
-import Evolutionary_Algorithm as ea
-import pandas as pd
 import numpy as np
+import pandas as pd
+import streamlit as st
+
+import Evolutionary_Algorithm as ea
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 def parse_input(input_text):
-    # Split the input by lines and convert each line to a list of values
-    rows = input_text.strip().split('\n')
-    print(rows)
-    if np.array_equal(rows, np.array([''])):
+    rows = input_text.strip().split("\n")
+    if rows == [""]:
         return np.array([])
-    array_data = [list(map(int, row.split(','))) for row in rows]
-    # Convert the list of lists to a NumPy array
-    array_np = np.array(array_data)
-    return np.unique(array_np, axis=0)
+    array_data = [list(map(int, row.split(","))) for row in rows]
+    return np.unique(np.array(array_data), axis=0)
+
+
+def init_state():
+    # Per-session state: the archive, current test set, sigma and cycle are stateful and
+    # belong to this HiL session, unlike the module-level parameters below (w, gamma, popsize,
+    # ...), which stay plain `ea.<param>` globals shared by every session, same as before.
+    st.session_state.setdefault("archive", ea.new_archive())
+    st.session_state.setdefault("test_set", np.array([]))
+    st.session_state.setdefault("test_set_version", 0)
+    st.session_state.setdefault("sigma", ea.sigma)
+    st.session_state.setdefault("cycle", 0)
+    st.session_state.setdefault("cycles_without_failure", 0)
+    st.session_state.setdefault("rng", ea.rng)
+
+
+def test_set_dataframe(test_set):
+    df = pd.DataFrame(test_set, columns=("t_Start", "t_End"))
+    df["error found"] = False
+    return df
+
 
 def main():
     st.set_page_config(layout="wide")
-
     st.title("Evolutionary Algorithm")
-
     st.write("_All time variables are given in milliseconds (ms)_")
+    init_state()
 
-    st.subheader('Implementation Variables')
-    colA, colD = st.columns(2)
-    app_vars = st.container()
-    st.divider()
-    with app_vars:
-        ea.step_2_iterations = colA.number_input('`step_2_iterations`: Number of iterations in Step_2'
-                                                , value=ea.step_2_iterations, step=1, format="%d")
-        ea.offset = colD.number_input('`offset`: Possible offset of the range (T_Start, t_0) for the creation of samples in step_1'
-                                    , value=ea.offset)
-
-    st.subheader('Algorithm Variables')
+    st.subheader("Domain")
     col1, col2, col3 = st.columns(3)
+    ea.T_Start = col1.number_input("`T_Start`: start of the pre-crash recording time", value=ea.T_Start)
+    ea.t_0 = col2.number_input("`t_0`: end of the pre-crash recording time (normally 0)", value=ea.t_0)
+    ea.offset = col3.number_input(
+        "`offset`: extension of T for Step 1 / random immigrant samples", value=ea.offset
+    )
+
+    st.subheader("Fitness weights")
+    colA, colB, colC, colD, colE = st.columns(5)
+    ea.w = colA.number_input(
+        "`w`: weight of t_End vs t_start in V1 and d", value=float(ea.w), min_value=0.0, max_value=1.0
+    )
+    ea.gamma = colB.number_input("`gamma`: weight of V2 (out-of-T penalty)", value=float(ea.gamma))
+    ea.r = colC.number_input("`r`: novelty radius (normalised by |T|)", value=float(ea.r), format="%f")
+    ea.beta = colD.number_input("`beta`: weight of V3; must be > r", value=float(ea.beta), format="%f")
+    ea.s = colE.number_input(
+        "`s`: ranking selection pressure", value=float(ea.s), min_value=1.0, max_value=2.0
+    )
+
+    st.subheader("Mutation")
     colF, colG, colH, colI, colJ = st.columns(5)
-    alg_vars = st.container()
+    ea.sigma = colF.number_input("`sigma`: initial mutation sigma (ms)", value=float(ea.sigma))
+    ea.patience = colG.number_input(
+        "`patience`: cycles without failure before sigma grows", value=ea.patience, step=1, format="%d"
+    )
+    ea.immigrant_rate = colH.number_input(
+        "`immigrant_rate`: share of random candidates", value=float(ea.immigrant_rate),
+        min_value=0.0, max_value=1.0,
+    )
+    ea.d_min = colI.number_input("`d_min`: minimum event duration (ms)", value=ea.d_min, step=1, format="%d")
+    ea.resolution_ms = colJ.number_input(
+        "`resolution_ms`: boundary resolution (ms)", value=ea.resolution_ms, step=1, format="%d"
+    )
+
+    st.subheader("Population and reproducibility")
+    colK, colL, colM = st.columns(3)
+    ea.popsize = colK.number_input("`popsize`: test set size", value=ea.popsize, step=1, format="%d")
+    ea.lambda_new = colL.number_input(
+        "`lambda_new`: candidates generated per cycle", value=ea.lambda_new, step=1, format="%d"
+    )
+    seed_input = colM.text_input("`seed`: RNG seed (blank = random)", value="" if ea.seed is None else str(ea.seed))
+    if colM.button("Apply seed"):
+        new_seed = int(seed_input) if seed_input.strip() else None
+        st.session_state.rng = ea.seed_rng(new_seed)
+        st.success(f"RNG reseeded (seed={new_seed}).")
+
     st.divider()
-    with alg_vars:
-        ea.T_Start = col1.number_input('`t_Start`: Instant when pre-crash recording time starts.'
-                                    , value=ea.T_Start)
-        ea.t_0 = col2.number_input('`t_0`: Instant when pre-crash recording time ends.  \
-                                    \n(normally set to zero)', value=ea.t_0)
-        ea.popsize = col3.number_input('`popsize`: Population size in the Evolutive Algorithm.\
-            \nNumber of test samples created with the algorithm', value=ea.popsize)
-        ea.lambda_new = col1.number_input('`lambda_new`: New generated samples in each iteration', value=ea.lambda_new)
-        ea.V_1_scale = col2.number_input('`V_1_scale`The value obtained from the minimum is divided by 1000\
-                                        \nso that the value of V_1 is comparable with the of V_2 (next criteria).'
-                                        , value=ea.V_1_scale, format="%f")
-        ea.a = colF.number_input('`a`: Factor to weight in $V_1$ \
-            \n $|t_{Start} - E_{i [ t_{Start} ]}|$', value=ea.a)
-        ea.b = colG.number_input('`b`: Factor to weight in $V_1$ \
-            \n $|t_{End} - E_{i [ t_{End} ]}|$', value=ea.b)
-        ea.c = colH.number_input('`c`: Factor to weight $V_2$ over $V_1$', value=ea.c)
-        ea.mu = colI.number_input('`mu`: Mean in normal distribution: for the standard normal distribution set in zero', value=ea.mu)
-        ea.sigma = colJ.number_input('`sigma`: Standard deviation in normal distribution: It is also known as the scale factor', value=ea.sigma)
+    st.subheader("Error hit set and archive")
+    col4, col5 = st.columns(2)
+    input_text = col4.text_area(
+        "`error_hit_set`: one tuple per line, `t_Start, t_End`"
+        "\nEx:\n-4025, -300\n-3213, -1232"
+    )
+    if col4.button("Enter `error_hit_set`"):
+        try:
+            ea.error_hit_set = parse_input(input_text)
+            col4.success("`error_hit_set` input successful!")
+        except ValueError as e:
+            logger.exception("Invalid error_hit_set input")
+            col4.error(f"Invalid input format. Please enter a valid `error_hit_set`. ({e})")
 
-    col4, col5, col6 = st.columns(3)
-    running = st.container()
-    df_error_set = pd.DataFrame()
-    df_first_test_samples = pd.DataFrame()
-    df_test_samples = pd.DataFrame()
-    
+    uploaded = col5.file_uploader("Upload archive CSV", type="csv")
+    if uploaded is not None and col5.button("Load uploaded archive"):
+        try:
+            loaded = pd.read_csv(uploaded)
+            missing = set(ea.ARCHIVE_COLUMNS) - set(loaded.columns)
+            if missing:
+                raise ValueError(f"missing columns: {sorted(missing)}")
+            st.session_state.archive = loaded[ea.ARCHIVE_COLUMNS]
+            st.session_state.cycle = int(loaded["cycle"].max()) if not loaded.empty else 0
+            col5.success(f"Archive loaded: {len(loaded)} rows, cycle {st.session_state.cycle}.")
+        except Exception as e:
+            logger.exception("Error loading archive")
+            col5.error(f"Error loading archive: {e}")
+
+    if not st.session_state.archive.empty:
+        col5.download_button(
+            "Download archive CSV",
+            st.session_state.archive.to_csv(index=False),
+            file_name="archive.csv",
+            mime="text/csv",
+        )
+
     st.divider()
-    with running:
-        input_text = col4.text_area('`error_hit_set` \
-                \n Enter rows with format $t_{Start}$ , $t_{End}$  \
-                \n Ex: \
-                \n-4025, -300\
-                \n-3213, -1232')
-        if col4.button("Enter `error_hit_set`"):
+    st.subheader("HiL loop")
+    col6, col7, col8 = st.columns(3)
+
+    if col6.button("Step 1: create first test set"):
+        st.session_state.archive = ea.merge_manual_error_hit_set(ea.new_archive(), ea.error_hit_set)
+        st.session_state.test_set = ea.initialize_samples_array(ea.popsize, rng=st.session_state.rng)
+        st.session_state.test_set_version += 1
+        st.session_state.sigma = ea.sigma
+        st.session_state.cycle = 0
+        st.session_state.cycles_without_failure = 0
+
+    if st.session_state.test_set.size == 0:
+        st.info("Run Step 1 to create the first test set.")
+    else:
+        st.write(f"Current test set (cycle {st.session_state.cycle}, sigma={st.session_state.sigma:.1f}):")
+        editor_key = f"test_set_editor_{st.session_state.test_set_version}"
+        edited = st.data_editor(
+            test_set_dataframe(st.session_state.test_set),
+            key=editor_key,
+            hide_index=True,
+            column_config={"error found": st.column_config.CheckboxColumn(required=True)},
+            disabled=["t_Start", "t_End"],
+        )
+
+        if col7.button("Record HiL results"):
+            verdicts = edited["error found"].to_numpy(dtype=int)
+            st.session_state.archive = ea.record_results(
+                st.session_state.archive,
+                st.session_state.test_set,
+                verdicts,
+                st.session_state.cycle + 1,
+            )
+            st.session_state.cycle += 1
+            st.session_state.sigma, st.session_state.cycles_without_failure = ea.update_sigma(
+                st.session_state.sigma,
+                bool(verdicts.sum() > 0),
+                st.session_state.cycles_without_failure,
+            )
+            st.success(f"Recorded cycle {st.session_state.cycle}: {int(verdicts.sum())} failure(s).")
+
+        if col8.button("Propose next test set (Step 2)"):
             try:
-                ea.error_hit_set =  parse_input(input_text)
-                col4.success("`error_hit_set` input successful!")
-            except ValueError as e:
-                logger.exception("Invalid error_hit_set input")
-                col4.error(f"Invalid input format. Please enter a valid `error_hit_set`. ({e})")
+                st.session_state.test_set = ea.step_2(
+                    st.session_state.archive,
+                    st.session_state.test_set,
+                    st.session_state.sigma,
+                    rng=st.session_state.rng,
+                )
+                st.session_state.test_set_version += 1
+            except Exception as e:
+                logger.exception("Error proposing the next test set")
+                col8.error(f"Error proposing the next test set: {e}")
 
-        if col5.button("Create Random samples array \
-            \n (Step 1)"):
-            try:
-                ea.first_test_samples = ea.initialize_samples_array()
-            except ValueError as e:
-                logger.exception("Error generating initial samples array")
-                col5.error(f"Error generating initial samples array: {e}")
+    st.divider()
+    if not st.session_state.archive.empty:
+        st.subheader("Archive")
+        st.dataframe(st.session_state.archive)
 
-        if col6.button("Run Evolutionary Algorithm \
-            \n (Step 2)"):
-            if ea.first_test_samples.size == 0:
-                col6.error("Please run 'Step 1' (Create Random samples array) first "
-                           "to generate the initial samples array.")
-            else:
-                try:
-                    ea.test_samples = ea.EA()
-                except Exception as e:
-                    logger.exception("Error running Evolutionary Algorithm")
-                    col6.error(f"Error running Evolutionary Algorithm: {e}")
 
-        if ea.error_hit_set.size != 0:
-            df_error_set = pd.DataFrame(ea.error_hit_set, columns=("t_Start" , "t_End"))
-        if ea.first_test_samples.size != 0:
-            df_first_test_samples = pd.DataFrame(ea.first_test_samples, columns=("t_Start" , "t_End"))
-        if ea.test_samples.size != 0:
-            df_test_samples = pd.DataFrame(ea.test_samples, columns=("t_Start" , "t_End"))
-        #print(ea.test_samples)
-        
-        col4.dataframe(df_error_set)
-        col5.dataframe(df_first_test_samples)
-        col6.dataframe(df_test_samples)
-
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()
