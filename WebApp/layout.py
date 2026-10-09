@@ -33,6 +33,7 @@ def init_state():
     st.session_state.setdefault("test_set", np.array([]))
     st.session_state.setdefault("test_set_version", 0)
     st.session_state.setdefault("verdicts", np.array([], dtype=bool))
+    st.session_state.setdefault("current_rows", [])
     st.session_state.setdefault("sigma", ea.sigma)
     st.session_state.setdefault("cycle", 0)
     st.session_state.setdefault("cycles_without_failure", 0)
@@ -49,15 +50,30 @@ def reset_verdicts():
     st.session_state.verdicts = np.zeros(len(st.session_state.test_set), dtype=bool)
 
 
+def record_test_set(test_set, cycle):
+    # Record a freshly generated test set into the archive immediately (verdicts default to
+    # "no error found"), and remember its archive row labels so later checkbox edits
+    # (apply_editor_edits) can be written straight back into those same rows.
+    st.session_state.archive = ea.record_results(
+        st.session_state.archive, test_set, np.zeros(len(test_set), dtype=int), cycle
+    )
+    st.session_state.current_rows = st.session_state.archive.tail(len(test_set)).index.tolist()
+
+
 def apply_editor_edits(editor_key):
     # Mirror the editor's checkbox edits into session_state so the marks survive reruns
-    # (they are only cleared by reset_verdicts when a new test set is created).
+    # (they are only cleared by reset_verdicts when a new test set is created), and write the
+    # same edit straight into the archive row already recorded for this test set.
     edits = st.session_state[editor_key].get("edited_rows", {})
     verdicts = st.session_state.verdicts.copy()
+    archive = st.session_state.archive
     for row, changes in edits.items():
         if "error found" in changes:
-            verdicts[int(row)] = bool(changes["error found"])
+            value = bool(changes["error found"])
+            verdicts[int(row)] = value
+            archive.loc[st.session_state.current_rows[int(row)], "verdict"] = int(value)
     st.session_state.verdicts = verdicts
+    st.session_state.archive = archive
 
 
 def main():
@@ -141,16 +157,17 @@ def main():
 
     st.divider()
     st.subheader("HiL loop")
-    col6, col7, col8 = st.columns(3)
+    col6, col7 = st.columns(2)
 
     if col6.button("Step 1: create first test set"):
         st.session_state.archive = ea.merge_manual_error_hit_set(ea.new_archive(), ea.error_hit_set)
         st.session_state.test_set = ea.initialize_samples_array(ea.popsize, rng=st.session_state.rng)
         st.session_state.test_set_version += 1
-        reset_verdicts()
         st.session_state.sigma = ea.sigma
-        st.session_state.cycle = 0
+        st.session_state.cycle = 1
         st.session_state.cycles_without_failure = 0
+        reset_verdicts()
+        record_test_set(st.session_state.test_set, st.session_state.cycle)
 
     if st.session_state.test_set.size == 0:
         st.info("Run Step 1 to create the first test set.")
@@ -166,37 +183,31 @@ def main():
             column_config={"error found": st.column_config.CheckboxColumn(required=True)},
             disabled=["t_Start", "t_End"],
         )
+        st.caption("Marks in “error found” are saved to the archive automatically.")
 
-        if col7.button("Record HiL results"):
-            verdicts = st.session_state.verdicts.astype(int)
-            st.session_state.archive = ea.record_results(
-                st.session_state.archive,
-                st.session_state.test_set,
-                verdicts,
-                st.session_state.cycle + 1,
+        if col7.button("Propose next test set (Step 2)"):
+            has_failure = bool(st.session_state.verdicts.sum() > 0)
+            new_sigma, new_cycles_without_failure = ea.update_sigma(
+                st.session_state.sigma, has_failure, st.session_state.cycles_without_failure
             )
-            st.session_state.cycle += 1
-            st.session_state.sigma, st.session_state.cycles_without_failure = ea.update_sigma(
-                st.session_state.sigma,
-                bool(verdicts.sum() > 0),
-                st.session_state.cycles_without_failure,
-            )
-            st.success(f"Recorded cycle {st.session_state.cycle}: {int(verdicts.sum())} failure(s).")
-
-        if col8.button("Propose next test set (Step 2)"):
             try:
-                st.session_state.test_set = ea.step_2(
+                next_test_set = ea.step_2(
                     st.session_state.archive,
                     st.session_state.test_set,
-                    st.session_state.sigma,
+                    new_sigma,
                     rng=st.session_state.rng,
                 )
-                st.session_state.test_set_version += 1
-                reset_verdicts()
             except Exception as e:
                 logger.exception("Error proposing the next test set")
-                col8.error(f"Error proposing the next test set: {e}")
+                col7.error(f"Error proposing the next test set: {e}")
             else:
+                st.session_state.sigma = new_sigma
+                st.session_state.cycles_without_failure = new_cycles_without_failure
+                st.session_state.cycle += 1
+                st.session_state.test_set = next_test_set
+                st.session_state.test_set_version += 1
+                reset_verdicts()
+                record_test_set(next_test_set, st.session_state.cycle)
                 # The table above was already drawn with the old set; redraw with the new one.
                 st.rerun()
 
