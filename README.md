@@ -72,7 +72,13 @@ The **EA** does not use recombination: the selected parent tuples are mutated di
 #### Test Set Selection
 The **EA**'s output is a **test set**, run on the HiL as one batch, so survivor selection is **greedy set selection** over the candidates only (comma selection: a tuple that has already been tested is never proposed again, unlike the old $(\mu+\lambda)$ elitism):
 
-Repeat `popsize` times: score every remaining candidate with $f$ against $A \cup \text{chosen}$ (the archive plus the tuples already picked for this set), take the lowest, add it to `chosen`. Because $V_3$ then also penalises proximity to the tuples just chosen, the set spreads out over the error clusters instead of collapsing onto one of them.
+Repeat `popsize` − `explore_slots` times: score every remaining candidate with $f$ against $A \cup \text{chosen}$ (the archive plus the tuples already picked for this set), take the lowest, add it to `chosen`. Because $V_3$ then also penalises proximity to the tuples just chosen, the set spreads out over the error clusters instead of collapsing onto one of them.
+
+**Exploration slots:** the last `explore_slots` tuples of the set are picked by pure exploration, without $V_1$. Once $E$ is non-empty, $V_1$ pulls every candidate scored by $f$ toward the known errors, so a failure region far from them is practically never found (random immigrants are generated, but lose the greedy selection against candidates near $E$). For these slots, a fresh batch of `lambda_new` random tuples is drawn (as in Step 1), and the tuple farthest by $d$ from $A \cup \text{chosen}$ is taken, repeated `explore_slots` times (greedy farthest-point selection, with $\gamma \cdot V_2$ still keeping $t_{\text{End}}$ inside $T$). Each pick lands in the largest untested gap, so over the cycles the exploration slots cover $T$ evenly while the rest of the set exploits $E$.
+
+* The cost is one exploitation slot per test set: the known failure regions are narrowed down more slowly.
+* Pure exploration is limited by the test budget. A failure region covering a share $q$ of the domain needs roughly $1/q$ exploration tests before it is reliably hit; the second region of `simulation.py` (about 0.2% of the domain) was found in 1 of 8 seeded runs after 60 cycles, and in 5 of 8 after 200 cycles, with `explore_slots = 1`.
+* `explore_slots = 0` restores the previous behaviour.
 
 ### Algorithm
 
@@ -83,7 +89,7 @@ One EA cycle corresponds to one HiL test run:
 3. **Record:** append the tuples with their verdict and cycle number to the archive $A$. Failures extend $E$; passes extend the "known good" region used by boundary candidates.
 4. **Adapt $\sigma$** from whether the cycle found a new failure.
 5. **Boundary candidates:** for each error $e$, find its nearest passed tuple $p$. If their distance is wider than `resolution_ms`, add the rounded midpoint $(e+p)/2$ as a candidate; it competes like any other candidate. Because passed tuples repel through $V_3$ too, the search fills in the region between errors and passes — where the failure boundary lies.
-6. **Step 2 (propose):** select parents (Variation Drive), generate candidates (Mutation) and boundary candidates (step 5), then pick the next test set (Test Set Selection). Back to step 2.
+6. **Step 2 (propose):** select parents (Variation Drive), generate candidates (Mutation) and boundary candidates (step 5), then pick the next test set (Test Set Selection), with `explore_slots` of it left for pure exploration. Back to step 2.
 
 **Termination:** stop when no error/pass pair is wider than `resolution_ms`, or after `max_cycles`, whichever comes first. The run reports which one triggered the stop.
 
@@ -113,6 +119,7 @@ All parameters are module variables in [Evolutionary_Algorithm.py](Evolutionary_
 | `sigma_min`, `sigma_max` | 1, $\lvert T \rvert / 10$ | Bounds for adaptive $\sigma$ |
 | `patience` | 2 | Cycles without a new failure before $\sigma$ grows |
 | `immigrant_rate` | 0.2 | Share of each candidate batch drawn fresh instead of mutated |
+| `explore_slots` | 1 | Test-set slots picked by pure exploration (farthest from everything tested) instead of by $f$; 0 disables them |
 | `d_min` | 1 | Minimum event duration $t_{\text{End}} - t_{\text{start}}$ (ms) |
 | `resolution_ms` | 1 | Boundary resolution and stop criterion (ms) |
 | `max_cycles` | 4 | HiL cycle limit |
@@ -133,7 +140,7 @@ pip install -r requirements.txt
 python Evolutionary_Algorithm.py
 ```
 
-**Web app:** a Streamlit interface that drives one real HiL loop interactively — you provide the pass/fail verdicts.
+**Web app:** a Streamlit interface that drives the HiL loop interactively. The test case is an illustration, not run on real hardware, so by default the simulated HiL of `simulation.py` gives the pass/fail verdicts; you can still change any of them by hand.
 
 ```sh
 streamlit run WebApp/layout.py
@@ -141,10 +148,18 @@ streamlit run WebApp/layout.py
 
 1. Set the domain, fitness weight, mutation and population parameters (or keep the defaults).
 2. Optionally enter a manually known `error_hit_set`, one tuple per line in the format `t_Start, t_End` (e.g. `-4025, -300`), and press **Enter `error_hit_set`**.
-3. Press **Step 1: create first test set**.
-4. Run the test set on the HiL, tick **error found** for every tuple that failed in the table, and press **Record HiL results**.
-5. Press **Propose next test set (Step 2)** and repeat from step 4.
-6. Download the archive at any point with **Download archive CSV**; reload it in a later session with **Upload archive CSV** + **Load uploaded archive**.
+3. Optionally enter a `seed`: Step 1 then reseeds the run, so the same seed, parameters and verdicts always give the same run (the same as `run_simulation(seed=...)`).
+4. Press **Step 1: create first test set**. Each Step 1 starts a new run; earlier runs stay in the history.
+5. Check the verdicts in the **error found** column. With **Simulated HiL** on, they are pre-filled by the oracle; any change is saved to the archive automatically.
+6. Press **Propose next test set (Step 2)** and repeat from step 5, or press **Run N cycles (simulated HiL)** to propose and test N sets in a row.
+7. Download the archive at any point with **Download archive CSV**.
+
+**Test set development** shows how the proposals develop over a run, which is the goal stated at the top: exploit the flaw, uncover related malfunctions and narrow down the error.
+
+* **Chart:** the whole search space, with every failure, known or found, as a red ◆ and every pass as a ○ coloured by cycle.
+* **Cycle slider:** replays the run up to any cycle.
+* **Metrics per cycle:** failures per test and the mutation sigma.
+* **Run selector:** shows any earlier run with the parameters it was started with; **Clear history** drops every run but the current one.
 
 **Tests:**
 

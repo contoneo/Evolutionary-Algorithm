@@ -52,6 +52,10 @@ patience = 2
 # immigrant_rate: fraction of each candidate batch drawn fresh from initialize_samples_array()
 # instead of from mutation, to keep exploring (Pesticide Paradox).
 immigrant_rate = 0.2
+# explore_slots: test-set slots reserved for pure exploration (see select_explorers). Without
+# them, once E is non-empty V1 pulls every slot toward the known errors, and failure regions
+# far from them are practically never found.
+explore_slots = 1
 # d_min: minimum event duration (t_End - t_start), so a mutated tuple is never zero-length.
 d_min = 1
 
@@ -287,6 +291,26 @@ def select_test_set(candidates, error_set, tested_set, n=None):
     return chosen
 
 
+def select_explorers(pool, tested_set, n=None):
+    # Pure exploration, no V1: greedy farthest-point selection. Repeat n times: take the pool
+    # tuple farthest (by d) from A u chosen, with V2 still keeping t_End inside T. Each pick
+    # lands in the largest untested gap, so over the cycles the explorers cover T evenly.
+    if n is None:
+        n = explore_slots
+    pool = np.asarray(pool).reshape(-1, 2)
+    tested_set = np.asarray(tested_set).reshape(-1, 2)
+
+    chosen = np.empty((0, 2), dtype=int)
+    remaining = pool.copy()
+    for _ in range(min(n, remaining.shape[0])):
+        reference = np.concatenate((tested_set, chosen), axis=0)
+        scores = gamma * V_2(remaining) - distance_to_set(remaining, reference)
+        best_idx = int(np.argmin(scores))
+        chosen = np.concatenate((chosen, remaining[best_idx : best_idx + 1]), axis=0)
+        remaining = np.delete(remaining, best_idx, axis=0)
+    return chosen
+
+
 def boundary_candidates(error_set, passed_set, resolution=None):
     # For each error e, take the nearest passed tuple p. If d(e, p) is wider than `resolution`,
     # propose the rounded midpoint as a candidate: it competes like any other candidate, and
@@ -416,8 +440,22 @@ def step_2(archive, last_test_set, sigma_value, rng=None):
             extra = extra[~already_tested]
         candidates = np.unique(np.concatenate((candidates, extra), axis=0), axis=0)
 
-    # 2.4-2.5 Greedy test-set selection (A7): the next test set, picked from candidates only.
-    return select_test_set(candidates, error_set, tested_set)
+    # 2.4-2.5 Greedy test-set selection (A7): the next test set, picked from candidates only,
+    # with explore_slots of it left for 2.6.
+    n_explore = min(explore_slots, popsize)
+    chosen = select_test_set(candidates, error_set, tested_set, n=popsize - n_explore)
+
+    # 2.6 Exploration slots: farthest-point picks from a fresh random pool, so failure regions
+    # far from E can still be found while the rest of the set exploits E.
+    if n_explore > 0:
+        pool = initialize_samples_array(lambda_new, rng=rng)
+        taken = np.concatenate((tested_set, chosen), axis=0)
+        if taken.size:
+            already_taken = (pool[:, None, :] == taken[None, :, :]).all(axis=2).any(axis=1)
+            pool = pool[~already_taken]
+        pool = np.unique(pool, axis=0)
+        chosen = np.concatenate((chosen, select_explorers(pool, taken, n_explore)), axis=0)
+    return chosen
 
 
 def run_simulation(

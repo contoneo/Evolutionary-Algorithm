@@ -17,7 +17,7 @@ def reset_params():
         for name in (
             "T_Start", "t_0", "w", "gamma", "r", "beta", "s", "sigma", "sigma_min",
             "sigma_max", "patience", "immigrant_rate", "d_min", "popsize", "lambda_new",
-            "resolution_ms", "max_cycles", "offset",
+            "resolution_ms", "max_cycles", "offset", "explore_slots",
         )
     }
     yield
@@ -140,6 +140,30 @@ def test_select_test_set_spaces_candidates_apart():
     picked = {tuple(row) for row in chosen}
     close_pair_both_picked = (-2000, -500) in picked and (-2001, -499) in picked
     assert not close_pair_both_picked
+
+
+# --- Exploration slots ---
+
+def test_select_explorers_picks_the_farthest_tuple_and_spreads_out():
+    tested = np.array([[-4900, -4000]])
+    pool = np.array([[-100, -50], [-110, -60], [-2500, -1000]])
+    first = ea.select_explorers(pool, tested, n=1)
+    assert tuple(first[0]) == (-100, -50)
+    # The second pick skips the first pick's neighbour: it is too close to the first pick.
+    both = ea.select_explorers(pool, tested, n=2)
+    assert {tuple(row) for row in both} == {(-100, -50), (-2500, -1000)}
+
+
+@pytest.mark.parametrize("slots", [0, 1, 4])
+def test_step_2_returns_popsize_distinct_untested_tuples_with_explore_slots(slots):
+    ea.explore_slots = slots
+    archive = ea.record_results(ea.new_archive(), ea.step_1(), np.array([1, 0, 0, 0]), cycle=1)
+    proposed = ea.step_2(archive, ea.step_1(), ea.sigma, rng=np.random.default_rng(5))
+    tested = ea.archive_tested_set(archive)
+    assert proposed.shape[0] == ea.popsize
+    assert len(np.unique(proposed, axis=0)) == ea.popsize
+    for row in proposed:
+        assert not (tested == row).all(axis=1).any()
 
 
 # --- Reproducibility ---
