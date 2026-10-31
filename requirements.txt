@@ -1,4 +1,6 @@
-numpy
-pandas
-streamlit
-pytest
+# Minimum versions: the ones the project is tested with.
+numpy>=2.5
+pandas>=3.0
+streamlit>=1.63  # >= 1.60 for client.disableDataExport
+altair>=6.2  # used directly by WebApp/history_chart.py
+pytest>=9.1

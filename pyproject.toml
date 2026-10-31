@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# The repository root is importable (Evolutionary_Algorithm and the WebApp package) without
+# sys.path changes in the tests.
+pythonpath = ["."]
+testpaths = ["tests"]
