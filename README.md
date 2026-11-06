@@ -1,4 +1,38 @@
- Evolutionary Algorithm for EDR test samples
+# Adaptive Evolutionary Search for Automotive Safety Testing
+### A feedback-driven, AI-based approach to generating HiL test cases for EDR/DSSAD
+
+## Overview
+
+While proposing testing methodologies in the context of the ISO 26262 standard, I realized the importance of generating tests guided by a fitness function, with a controlled amount of randomness so the search keeps exploring while approaching a specific threshold within the scope of the test goal.
+
+The algorithm is an evolutionary search that learns from each pass/fail verdict of the Hardware-in-the-Loop (HiL) test. It balances exploitation of known failures against exploration of untested regions through a multi-objective fitness function, rank-based selection and a mutation step size that adapts to the feedback it receives. Starting from a single detected malfunction, it works toward related malfunctions and the boundary of the failing region.
+
+The algorithm presented here was designed for a concrete case exploring the activation threshold of an Event Data Recorder (EDR). The thesis proposes extending the same approach to other contexts.
+
+## At a glance
+
+| | |
+|---|---|
+| **Problem** | Automatically generating semi-random test cases that approach a critical threshold of a safety function (EDR / DSSAD data recorders) on Hardware-in-the-Loop benches. |
+| **Approach** | An evolutionary search driven by pass/fail feedback: a three-part fitness function (attraction to known failures, regulatory constraint, novelty), rank-based selection, adaptive mutation and greedy batch selection. |
+| **Controlled randomness** | Low-discrepancy (Halton) sampling, random immigrants and periodic coverage cycles keep the search from collapsing onto the first failure found. |
+| **Scope** | Designed for the EDR activation threshold; the thesis proposes extending it to other test contexts. |
+| **Domain** | Automotive safety validation, ISO 26262-based testing methodology |
+| **Engineering** | Python 3.13, NumPy, pandas, Streamlit, pytest; seeded, bit-for-bit reproducible runs; built-in benchmark against uniform random testing |
+| **Status** | Thesis version preserved in a notebook; current version rewritten, documented and tested |
+
+## Quick start
+
+```sh
+pip install -r requirements.txt
+streamlit run WebApp/layout.py
+```
+
+Press **Step 1**, then **Run N cycles (simulated HiL)**, and watch the search find a failure, close in on its boundary and look for other failure regions.
+
+---
+
+## Technical documentation
 
 ### Introduction
 This algorithm was presented as a part in the thesis I wrote for my Master of Science (M.Sc.) degree in the “Automotive Software Engineering” program, whose main objective was to provide a testing methodology based on the ISO 26262 standard to address the new regulations taking effect in 2021 for EDRs and DSSADs within the framework of several markets around the world.  EDR (Event Data Recorder) and DSSAD (Data Storage System for Automated Driving) are devices installed in vehicles to record critical driving and crash dynamics data during an accident.
